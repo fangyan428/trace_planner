@@ -290,10 +290,11 @@ function planRows() {
     const estimated=stats.dist/1000/Math.max(0.1,Number(plan.speed)||3)*60+stats.up/Math.max(1,Number(plan.climbRate)||400)*60;
     const manual=plan.minutes!==''&&Number.isFinite(Number(plan.minutes));
     const incomplete=stats.missing||routeBreaks.some(j=>j>a&&j<=b);
-    const moving=manual?Math.max(0,Number(plan.minutes)):(incomplete?null:Math.ceil(estimated));
+    const estimatedMinutes=incomplete?null:Math.ceil(estimated);
+    const moving=manual?Math.max(0,Number(plan.minutes)):estimatedMinutes;
     elapsed=elapsed===null||moving===null?null:elapsed+moving;const arrival=elapsed;
     if(elapsed!==null)elapsed+=Math.max(0,Number(plan.rest)||0);
-    return {a,b,stats,plan,moving,arrival,elapsed,incomplete,manual};
+    return {a,b,stats,plan,estimatedMinutes,moving,arrival,elapsed,incomplete,manual};
   });
 }
 function clockLabel(minutes) {
@@ -318,10 +319,17 @@ function renderPlanner() {
     const first=document.createElement('td');const name=document.createElement('input');name.value=row.plan.name;name.setAttribute('aria-label',say('路段名称','Leg name'));
     name.onchange=()=>updatePlan(row,'name',name.value);first.append(name);
     const locate=document.createElement('button');locate.textContent=say('定位','Locate');locate.onclick=()=>map.fitBounds(route.slice(row.a,row.b+1),{padding:[40,40]});first.append(locate);tr.append(first);
-    const data=document.createElement('td');data.textContent=`${(row.stats.dist/1000).toFixed(2)} km / ↑${elevationStat(row.stats.up,ele.slice(row.a,row.b+1))} / ↓${elevationStat(row.stats.down,ele.slice(row.a,row.b+1))}\n${say('累计','Cumulative')} ${(prefDist[row.b]/1000).toFixed(2)} km`;tr.append(data);
+    const data=document.createElement('td');data.textContent=`${(row.stats.dist/1000).toFixed(2)} km / ${elevationStat(row.stats.up,ele.slice(row.a,row.b+1))} / ${elevationStat(row.stats.down,ele.slice(row.a,row.b+1))}\n${say('累计','Cumulative')} ${(prefDist[row.b]/1000).toFixed(2)} km`;tr.append(data);
     const time=document.createElement('td');
     for(const [key,label,step] of [['speed',say('速度 km/h','Speed km/h'),0.1],['climbRate',say('爬升 m/h','Climb m/h'),10],['minutes',say('手填用时 min','Override min'),1],['rest',say('休息 min','Rest min'),1]]){
+      if(key==='minutes'){
+        const estimateLabel=say('预计时间 min','Estimated time min');
+        const estimate=document.createElement('input');estimate.type='text';estimate.readOnly=true;estimate.value=row.estimatedMinutes===null?say('待补数据','Data required'):String(row.estimatedMinutes);estimate.setAttribute('aria-label',estimateLabel);
+        estimate.title=say('根据距离、速度和爬升自动计算，不含休息；手填用时不会改变此估算。','Calculated from distance, speed and ascent, excluding rests; manual overrides do not change this estimate.');
+        const wrapper=document.createElement('label');wrapper.textContent=estimateLabel;wrapper.append(estimate);time.append(wrapper);
+      }
       const el=document.createElement('input');el.type='number';el.min=key==='speed'?0.1:0;el.step=step;el.value=row.plan[key];el.placeholder=label;el.setAttribute('aria-label',label);el.title=label;
+      if(key==='minutes'){el.placeholder=say('留空使用预计时间','Leave blank to use estimate');el.title=say('填写后覆盖预计时间；清空恢复自动计算（不含休息）。','Enter to override the estimate; clear to restore automatic timing (excluding rests).');}
       const wrapper=document.createElement('label');wrapper.textContent=label;wrapper.append(el);time.append(wrapper);
       el.onchange=()=>updatePlan(row,key,el.value);
     }tr.append(time);
